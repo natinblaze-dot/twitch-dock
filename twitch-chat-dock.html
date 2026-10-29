@@ -354,8 +354,11 @@ function onPrivmsg(m,hist){
     first:t['first-msg']==='1',reply:t['reply-parent-display-name']?{name:t['reply-parent-display-name'],body:t['reply-parent-msg-body']}:null,
     ts:+t['tmi-sent-ts']||+t['rm-received-ts']||Date.now(),hist});
 }
+let lastRowUser=null;
 function colorRow(row,o){
-  rowN++;
+  const who=o.uid||o.login;
+  if(!(who&&who===lastRowUser))rowN++; // ugyanaz a felhasználó egymás után → ugyanaz a szín
+  lastRowUser=who;
   switch(cfg.palette){
     case 'zebra':row.classList.add(rowN%2?'zebra-a':'zebra-b');return;
     case 'cycle':row.style.setProperty('--h',CYCLE[rowN%CYCLE.length]);return;
@@ -638,7 +641,7 @@ function saveSettings(){
 function reset(){
   gen++;authFailed=false;reconnectDelay=1000;demo=false;
   if(ws){try{ws.close()}catch(e){}ws=null}
-  chat.replaceChildren();msgEls.clear();userHist.clear();rowN=0;stick=true;clearPending();setCanMod(false);setDot('');
+  chat.replaceChildren();msgEls.clear();userHist.clear();rowN=0;lastRowUser=null;stick=true;clearPending();setCanMod(false);setDot('');
   for(const k in roomModes)delete roomModes[k];renderModes();
 }
 function welcome(){
