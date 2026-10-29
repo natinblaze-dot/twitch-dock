@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twitch Chat Dock</title>
+<style>
+:root{
+  --bg:#0e0e10;--panel:#18181b;--panel2:#1f1f23;--text:#efeff1;--muted:#a0a0ab;
+  --accent:#a970ff;--danger:#eb0400;--warn:#ffb31a;--ok:#00d26a;--border:#303036;
+  --fs:14px;--tint:.16;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{position:relative;background:var(--bg);color:var(--text);font-family:Inter,"Segoe UI",Roboto,system-ui,sans-serif;font-size:var(--fs);display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select{font:inherit;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;width:100%}
+input[type=checkbox],input[type=range]{width:auto}
+input[type=range]{width:100%}
+
+header{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+.dot{width:9px;height:9px;border-radius:50%;background:#666;flex-shrink:0}
+.dot.on{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.dot.err{background:var(--danger)}
+#chanName{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%}
+#modes{display:flex;gap:4px;flex:1;overflow:hidden}
+.chip{font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--border);white-space:nowrap}
+.hbtn{background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;white-space:nowrap}
+.hbtn:hover{border-color:var(--accent)}
+.hbtn.raid{background:#5c2bb8;border-color:#7d4ae0;color:#fff}
+
+#chat{flex:1;overflow-y:auto;overflow-x:hidden;padding:4px 0;scrollbar-width:thin}
+.msg{position:relative;padding:4px 8px 4px 9px;margin:2px 4px;border-radius:5px;line-height:1.5;overflow-wrap:anywhere;
+  background:hsla(var(--h,260),65%,45%,var(--tint));border-left:3px solid hsla(var(--h,260),85%,62%,.95)}
+.msg.zebra-a{background:rgba(255,255,255,.035);border-left-color:#3a3a44}
+.msg.zebra-b{background:rgba(255,255,255,.09);border-left-color:#5a5a6e}
+.hist{opacity:.6}
+.msg.first{box-shadow:inset 0 0 0 1px var(--ok)}
+.msg.mention{box-shadow:inset 0 0 0 2px var(--warn)}
+.deleted .text{text-decoration:line-through;opacity:.45}
+.deleted::after{content:"törölve";font-size:10px;margin-left:6px;color:#ff6b6b;font-weight:700}
+.time{color:var(--muted);font-size:.8em;margin-right:5px;font-variant-numeric:tabular-nums}
+.badge{height:1.15em;vertical-align:-.2em;margin-right:3px}
+.name{font-weight:700;cursor:pointer}
+.name:hover{text-decoration:underline}
+.tag{font-size:10px;font-weight:800;padding:0 5px;border-radius:3px;margin-right:5px;vertical-align:1px}
+.tag.first{background:var(--ok);color:#000}
+.tag.bits{background:#9147ff;color:#fff}
+.reply{font-size:.8em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mention-tok{font-weight:700;background:rgba(255,255,255,.1);border-radius:3px;padding:0 2px}
+.emote-wrap{display:inline-grid;vertical-align:middle;margin:-5px 1px}
+.emote-wrap>img{grid-area:1/1;justify-self:center;align-self:center}
+.emote{height:calc(var(--fs) * 2);width:auto}
+.sys{margin:2px 4px;padding:3px 9px;font-size:.85em;color:var(--muted);font-style:italic}
+.event{position:relative;margin:3px 4px;padding:6px 9px;border-radius:5px;background:rgba(169,112,255,.2);border-left:3px solid var(--accent)}
+.event.raid{background:rgba(255,80,80,.2);border-left-color:#ff5050}
+.event.announce{background:rgba(0,200,255,.15);border-left-color:#00c8ff}
+.event .sysmsg{font-weight:700;margin-bottom:2px}
+
+.actions{position:absolute;top:2px;right:4px;display:none;gap:3px;background:var(--panel);padding:2px;border-radius:6px;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.5);z-index:2}
+body.can-mod .msg:hover .actions{display:flex}
+.act{background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700;line-height:1.5}
+.act:hover{border-color:var(--accent)}
+.act.ban{color:#ff6b6b}
+.act.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
+
+#newBtn{position:absolute;left:50%;transform:translateX(-50%);bottom:56px;display:none;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:5px 14px;font-weight:700;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:5}
+footer{display:flex;gap:6px;padding:6px 8px;background:var(--panel);border-top:1px solid var(--border);flex-shrink:0}
+footer button{background:var(--accent);border:0;border-radius:6px;padding:0 12px;font-weight:700;color:#fff}
+
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:20;padding:10px}
+.backdrop.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:10px;width:100%;max-width:440px;max-height:100%;overflow:auto;padding:14px}
+.modal h2{margin:0 0 10px;font-size:16px}
+.field{margin-bottom:10px}
+.field>label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+.row{display:flex;gap:8px;align-items:center}
+.hint{font-size:11px;color:var(--muted);margin-top:3px;word-break:break-all}
+.btn{background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-weight:700;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+.check{display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px}
+
+#card{position:fixed;display:none;z-index:15;width:280px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px;box-shadow:0 6px 24px rgba(0,0,0,.6)}
+.cname{font-weight:800;font-size:15px;margin-bottom:8px}
+.cbtns{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.uhist{max-height:170px;overflow:auto;font-size:12px;border-top:1px solid var(--border);padding-top:6px}
+.uhist div{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+#toasts{position:fixed;bottom:56px;right:8px;display:flex;flex-direction:column;gap:4px;z-index:30;align-items:flex-end}
+.toast{background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--ok);padding:6px 10px;border-radius:6px;font-size:12px;max-width:260px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.toast.err{border-left-color:var(--danger)}
+.welcome{padding:24px 16px;text-align:center;color:var(--muted)}
+.welcome .btn{margin:10px 4px 0}
+.raidm{padding:0;max-width:400px}
+.rhead{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+.rhead h2{margin:0}
+.x{background:none;border:0;font-size:16px;color:var(--muted);padding:2px 6px}
+.x:hover{color:var(--text)}
+.rpad{padding:12px 14px}
+.rsec{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
+.ritem{display:flex;gap:10px;align-items:center;padding:7px 8px;border-radius:8px;cursor:pointer}
+.ritem:hover{background:var(--panel2)}
+.ritem img{width:36px;height:36px;border-radius:50%;background:var(--panel2);flex-shrink:0}
+.rn{font-weight:700}
+.rg{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv{margin-left:auto;font-size:12px;color:#ff6b6b;font-weight:700;white-space:nowrap}
+.rconfirm{text-align:center;padding:20px 14px}
+.rconfirm img{width:84px;height:84px;border-radius:50%;border:3px solid var(--accent);background:var(--panel2)}
+.rbig{font-size:18px;font-weight:800;margin:10px 0 4px}
+.rbar{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden;margin:16px 0 8px}
+.rbar>div{height:100%;background:var(--accent);width:0;transition:width 1s linear}
+.rbtn{width:100%;margin-top:8px}
+.cbadges{display:block;margin:-4px 0 8px;font-size:12px;color:var(--muted)}
+.cbadges img{height:18px;margin-right:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <span id="chanName">—</span>
+  <div id="modes"></div>
+  <button class="hbtn" id="reloadBtn" title="Emoteok újratöltése">⟳</button>
+  <button class="hbtn raid" id="raidBtn" title="Csatorna raidelése">🚀 Raid</button>
+  <button class="hbtn" id="settingsBtn" title="Beállítások">⚙</button>
+</header>
+<div id="chat"></div>
+<button id="newBtn">↓ Új üzenetek</button>
+<footer>
+  <input id="input" placeholder="Üzenet… (/ban /timeout /unban /raid /unraid /so /clear /me)" autocomplete="off">
+  <button id="sendBtn" title="Küldés">➤</button>
+</footer>
+<div id="card"></div>
+<div id="toasts"></div>
+
+<div class="backdrop" id="settingsModal"><div class="modal">
+  <h2>⚙ Beállítások</h2>
+  <div class="field"><label>Twitch Client ID</label><input id="sClientId" placeholder="dev.twitch.tv/console → az appod Client ID-ja">
+    <div class="hint">Ezt add meg OAuth Redirect URL-nek a Twitch appnál: <b id="redirHint"></b></div></div>
+  <div class="field row"><button class="btn primary" id="loginBtn">Bejelentkezés Twitch-csel</button><button class="btn" id="logoutBtn">Kijelentkezés</button></div>
+  <div class="hint" id="whoami" style="margin:-4px 0 10px"></div>
+  <div class="field"><label>…vagy kézzel beillesztett access token</label><input id="sToken" type="password" placeholder="(üresen hagyva marad a mentett)"></div>
+  <div class="field"><label>Csatorna (üresen = a saját csatornád)</label><input id="sChannel" placeholder="pl. masik_streamer"></div>
+  <div class="field"><label>Sorok színezése</label><select id="sPalette">
+    <option value="rainbow">Szivárvány – minden sor más színű</option>
+    <option value="cycle">6 színű körforgás</option>
+    <option value="user">Felhasználónként saját szín</option>
+    <option value="zebra">Zebra (két szürke árnyalat)</option></select></div>
+  <div class="field"><label>Színerősség</label><input type="range" id="sTint" min="0.05" max="0.4" step="0.01"></div>
+  <div class="field"><label>Betűméret</label><input type="range" id="sFont" min="11" max="22" step="1"></div>
+  <div class="field"><label>Kiemelt szavak (vesszővel elválasztva)</label><input id="sHighlight" placeholder="pl. giveaway, bug, kérdés"></div>
+  <label class="check"><input type="checkbox" id="s_bttv"> BTTV emoteok</label>
+  <label class="check"><input type="checkbox" id="s_ffz"> FFZ emoteok</label>
+  <label class="check"><input type="checkbox" id="s_history"> Korábbi üzenetek betöltése induláskor</label>
+  <label class="check"><input type="checkbox" id="s_timestamps"> Időbélyegek</label>
+  <label class="check"><input type="checkbox" id="s_showDeleted"> Törölt üzenetek áthúzva maradjanak (különben eltűnnek)</label>
+  <label class="check"><input type="checkbox" id="s_pauseHover"> Görgetés megáll, ha az egér a chat fölött van</label>
+  <div class="btns"><button class="btn" id="settingsCancel">Mégse</button><button class="btn primary" id="settingsSave">Mentés</button></div>
+</div></div>
+
+<div class="backdrop" id="raidModal"><div class="modal raidm">
+  <div class="rhead"><h2>Csatorna raidelése</h2><button class="x" id="raidClose" title="Bezár">✕</button></div>
+  <div id="raidBody"></div>
+</div></div>
+
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const CFG_KEY='tcd_cfg_v1';
+const DEFAULTS={clientId:'',token:'',channel:'',palette:'rainbow',tint:0.16,fontSize:14,highlight:'',bttv:true,ffz:true,history:true,timestamps:true,showDeleted:true,pauseHover:true,maxMessages:300};
+const BOOL_KEYS=['bttv','ffz','history','timestamps','showDeleted','pauseHover'];
+const SCOPES=['chat:read','chat:edit','moderator:manage:chat_messages','moderator:manage:banned_users','channel:manage:raids','moderator:manage:shoutouts','user:read:follows'];
+const BADGE_CDN='https://static-cdn.jtvnw.net/badges/v1/';
+const DEMO_BADGES={'broadcaster/1':'5527c58c-fb7d-422d-b71b-f309dcb85cc1','moderator/1':'3267646d-33f0-4b17-b3df-f923a41db1d0','vip/1':'b817aba4-fad8-49e2-b88a-7cc744dfa6ec','subscriber/0':'5d9f2208-5dd8-11e7-8513-2ff4adfae661','premium/1':'bbbe0db0-a598-423e-86d0-f9fb98ca1933'};
+const DEMO_RAID=[{id:'201',login:'gamergabi',name:'GamerGabi',game:'Minecraft',viewers:134,live:true},{id:'202',login:'retro_robi',name:'Retro_Robi',game:'Super Mario 64',viewers:58,live:true},{id:'203',login:'csillajatszik',name:'CsillaJátszik',game:'Just Chatting',viewers:21,live:true}];
+const CYCLE=[0,210,120,45,290,170];
+const DEFAULT_NAME_COLORS=['#FF0000','#0000FF','#008000','#B22222','#FF7F50','#9ACD32','#FF4500','#2E8B57','#DAA520','#D2691E','#5F9EA0','#1E90FF','#FF69B4','#8A2BE2','#00FF7F'];
+const BTTV_ZW=new Set(['SoSnowy','IceCold','SantaHat','TopHat','ReinDeer','CandyCane','cvMask','cvHazmat']);
+
+let cfg=loadCfg(),me=null,room=null,ws=null,gen=0,authFailed=false,reconnectDelay=1000,demo=false;
+let canMod=false,myColor=null,myBadges='',rowN=0,stick=true,hovering=false,pending=0,raidState=null,raidTimer=null;
+const emotes3p=new Map(),badgeUrls=new Map(),msgEls=new Map(),userHist=new Map(),roomModes={};
+const chat=$('#chat');
+
+/* ---------- segédek ---------- */
+function loadCfg(){try{return {...DEFAULTS,...JSON.parse(localStorage.getItem(CFG_KEY)||'{}')}}catch(e){return {...DEFAULTS}}}
+function saveCfg(){try{localStorage.setItem(CFG_KEY,JSON.stringify(cfg))}catch(e){}}
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+function toast(msg,type){const t=el('div','toast'+(type==='err'?' err':''),msg);$('#toasts').append(t);setTimeout(()=>t.remove(),4500)}
+function hashStr(s){let h=0;for(const c of s)h=(h*31+c.codePointAt(0))|0;return Math.abs(h)}
+function hhmm(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function fmtDur(s){s=+s;if(s>=86400)return Math.round(s/86400)+' nap';if(s>=3600)return Math.round(s/3600)+' óra';if(s>=60)return Math.round(s/60)+' perc';return s+' mp'}
+function applyLook(){const r=document.documentElement.style;r.setProperty('--fs',cfg.fontSize+'px');r.setProperty('--tint',cfg.tint)}
+function setDot(st){$('#dot').className='dot'+(st?' '+st:'')}
+function setCanMod(v){canMod=v;document.body.classList.toggle('can-mod',v)}
+
+/* ---------- OAuth (implicit flow) ---------- */
+function redirectUri(){return location.origin+location.pathname}
+function handleOAuthReturn(){
+  const q=new URLSearchParams(location.search);
+  if(q.get('error')){toast('Bejelentkezés sikertelen: '+(q.get('error_description')||q.get('error')),'err');history.replaceState(null,'',location.pathname);return}
+  if(!location.hash.includes('access_token'))return;
+  const p=new URLSearchParams(location.hash.slice(1));
+  let expected=null;try{expected=localStorage.getItem('tcd_state')}catch(e){}
+  if(expected&&p.get('state')!==expected)toast('OAuth state nem egyezik, próbáld újra','err');
+  else{cfg.token=p.get('access_token');saveCfg();toast('Sikeres bejelentkezés')}
+  history.replaceState(null,'',location.pathname+location.search);
+}
+function login(){
+  const cid=$('#sClientId').value.trim();
+  if(!cid){toast('Előbb add meg a Client ID-t','err');return}
+  if(location.protocol==='file:'){toast('file:// címről nem működik a bejelentkezés – lásd a leírást','err');return}
+  cfg.clientId=cid;saveCfg();
+  const state=Math.random().toString(36).slice(2)+Date.now().toString(36);
+  try{localStorage.setItem('tcd_state',state)}catch(e){}
+  const u=new URL('https://id.twitch.tv/oauth2/authorize');
+  u.search=new URLSearchParams({response_type:'token',client_id:cid,redirect_uri:redirectUri(),scope:SCOPES.join(' '),state,force_verify:'true'}).toString();
+  location.href=u.toString();
+}
+
+/* ---------- Twitch API ---------- */
+async function validate(){
+  const r=await fetch('https://id.twitch.tv/oauth2/validate',{headers:{Authorization:'OAuth '+cfg.token}});
+  if(!r.ok)throw new Error('A token érvénytelen vagy lejárt');
+  return r.json();
+}
+async function helix(method,path,params,body){
+  if(demo){await new Promise(r=>setTimeout(r,150));return {data:[{id:'999',login:path,display_name:'Demó',profile_image_url:''}]}}
+  const u=new URL('https://api.twitch.tv/helix/'+path);
+  for(const[k,v]of Object.entries(params||{}))if(v!=null)[].concat(v).forEach(x=>u.searchParams.append(k,x));
+  const headers={'Client-Id':me.clientId,Authorization:'Bearer '+cfg.token};
+  if(body)headers['Content-Type']='application/json';
+  const r=await fetch(u,{method,headers,body:body?JSON.stringify(body):undefined});
+  if(r.status===204)return null;
+  const j=await r.json().catch(()=>null);
+  if(!r.ok)throw new Error((j&&j.message)||('HTTP '+r.status));
+  return j;
+}
+async function getUser(login){
+  const j=await helix('GET','users',{login:login.toLowerCase().replace(/^[@#]/,'')});
+  if(!j.data.length)throw new Error('Nincs ilyen felhasználó: '+login);
+  return j.data[0];
+}
+function banBody(uid,sec,reason){const d={user_id:uid};if(sec)d.duration=Math.max(1,Math.min(1209600,sec));if(reason)d.reason=reason;return {data:d}}
+const modApi={
+  del:id=>helix('DELETE','moderation/chat',{broadcaster_id:room.id,moderator_id:me.id,message_id:id}),
+  clear:()=>helix('DELETE','moderation/chat',{broadcaster_id:room.id,moderator_id:me.id}),
+  timeout:(uid,sec,reason)=>helix('POST','moderation/bans',{broadcaster_id:room.id,moderator_id:me.id},banBody(uid,sec,reason)),
+  ban:(uid,reason)=>helix('POST','moderation/bans',{broadcaster_id:room.id,moderator_id:me.id},banBody(uid,0,reason)),
+  unban:uid=>helix('DELETE','moderation/bans',{broadcaster_id:room.id,moderator_id:me.id,user_id:uid}),
+  raid:toId=>helix('POST','raids',{from_broadcaster_id:room.id,to_broadcaster_id:toId}),
+  unraid:()=>helix('DELETE','raids',{broadcaster_id:room.id}),
+  shoutout:toId=>helix('POST','chat/shoutouts',{from_broadcaster_id:room.id,to_broadcaster_id:toId,moderator_id:me.id}),
+};
+async function run(fn,okMsg){try{await fn();if(okMsg)toast(okMsg);return true}catch(e){toast('Hiba: '+e.message,'err');return false}}
+
+/* ---------- emoteok, badge-ek, előzmények ---------- */
+async function getJson(url){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
+async function loadEmotes(){
+  const id=room.id;
+  const res=await Promise.allSettled([
+    getJson('https://7tv.io/v3/emote-sets/global'),
+    getJson('https://7tv.io/v3/users/twitch/'+id),
+    cfg.bttv?getJson('https://api.betterttv.net/3/cached/emotes/global'):null,
+    cfg.bttv?getJson('https://api.betterttv.net/3/cached/users/twitch/'+id):null,
+    cfg.ffz?getJson('https://api.frankerfacez.com/v1/set/global'):null,
+    cfg.ffz?getJson('https://api.frankerfacez.com/v1/room/id/'+id):null,
+  ]);
+  const [g7,c7,gb,cb,gf,cf]=res.map(x=>x.status==='fulfilled'?x.value:null);
+  emotes3p.clear();
+  const add7=list=>(list||[]).forEach(e=>{const h=e.data&&e.data.host;if(!h)return;const base=(h.url.startsWith('//')?'https:':'')+h.url;
+    emotes3p.set(e.name,{u1:base+'/1x.webp',u2:base+'/2x.webp',zw:!!(((e.flags|0)&1)||((e.data.flags|0)&256)),p:'7TV'})});
+  const addB=list=>(list||[]).forEach(e=>emotes3p.set(e.code,{u1:`https://cdn.betterttv.net/emote/${e.id}/1x`,u2:`https://cdn.betterttv.net/emote/${e.id}/2x`,zw:BTTV_ZW.has(e.code),p:'BTTV'}));
+  const fixU=u=>u&&u.startsWith('//')?'https:'+u:u;
+  const addF=sets=>Object.values(sets||{}).forEach(s=>(s&&s.emoticons||[]).forEach(e=>emotes3p.set(e.name,{u1:fixU(e.urls['1']),u2:fixU(e.urls['2']||e.urls['1']),p:'FFZ'})));
+  // prioritás: globálisak < csatorna; 7TV nyer ütközésnél
+  if(gf)addF((gf.default_sets||[]).map(i=>gf.sets[i]));
+  if(gb)addB(gb);
+  if(g7)add7(g7.emotes);
+  if(cf)addF(cf.sets);
+  if(cb){addB(cb.channelEmotes);addB(cb.sharedEmotes)}
+  const has7=!!(c7&&c7.emote_set);
+  if(has7)add7(c7.emote_set.emotes);
+  return {n:emotes3p.size,has7,ok7:!!g7};
+}
+async function loadBadges(){
+  badgeUrls.clear();
+  for(const [path,params] of [['chat/badges/global',{}],['chat/badges',{broadcaster_id:room.id}]]){
+    try{const j=await helix('GET',path,params);j.data.forEach(s=>(s.versions||[]).forEach(v=>badgeUrls.set(s.set_id+'/'+v.id,{u1:v.image_url_1x,u2:v.image_url_2x,t:v.title||s.set_id})))}catch(e){}
+  }
+}
+async function loadHistory(){
+  try{const j=await getJson(`https://recent-messages.robotty.de/api/v2/recent-messages/${room.login}?limit=60`);(j.messages||[]).forEach(l=>handleLine(l,true))}catch(e){}
+}
+
+/* ---------- IRC ---------- */
+function connectIrc(){
+  const myGen=gen;
+  const s=new WebSocket('wss://irc-ws.chat.twitch.tv:443');ws=s;
+  s.onopen=()=>{s.send('CAP REQ :twitch.tv/tags twitch.tv/commands');s.send('PASS oauth:'+cfg.token);s.send('NICK '+me.login);s.send('JOIN #'+room.login)};
+  s.onmessage=e=>String(e.data).split('\r\n').forEach(l=>{if(l)handleLine(l,false)});
+  s.onclose=()=>{if(myGen!==gen)return;setDot('err');if(authFailed)return;
+    setTimeout(()=>{if(myGen===gen)connectIrc()},reconnectDelay);reconnectDelay=Math.min(reconnectDelay*2,30000)};
+}
+function unesc(v){return v.replace(/\\(.)/g,(_,c)=>({s:' ',':':';','\\':'\\',r:'\r',n:'\n'})[c]??c)}
+function parseIrc(line){
+  const tags={};let prefix=null;
+  if(line[0]==='@'){const sp=line.indexOf(' ');line.slice(1,sp).split(';').forEach(kv=>{const eq=kv.indexOf('=');if(eq<0)tags[kv]='';else tags[kv.slice(0,eq)]=unesc(kv.slice(eq+1))});line=line.slice(sp+1)}
+  if(line[0]===':'){const sp=line.indexOf(' ');prefix=line.slice(1,sp);line=line.slice(sp+1)}
+  let trailing=null;const ti=line.indexOf(' :');if(ti!==-1){trailing=line.slice(ti+2);line=line.slice(0,ti)}
+  const params=line.split(' ');const command=params.shift();
+  return {tags,prefix,command,params,trailing};
+}
+function nick(m){return (m.prefix||'').split('!')[0]}
+function handleLine(line,hist){
+  const m=parseIrc(line);
+  switch(m.command){
+    case 'PING':if(ws&&ws.readyState===1)ws.send('PONG :'+(m.trailing||'tmi.twitch.tv'));break;
+    case 'RECONNECT':if(ws)ws.close();break;
+    case 'JOIN':if(!hist&&me&&nick(m)===me.login){setDot('on');reconnectDelay=1000}break;
+    case 'ROOMSTATE':Object.assign(roomModes,m.tags);renderModes();break;
+    case 'USERSTATE':case 'GLOBALUSERSTATE':
+      if(hist)break;myColor=m.tags.color||myColor;if(m.command==='USERSTATE')myBadges=m.tags.badges||'';
+      if(m.command==='USERSTATE')setCanMod(room.id===me.id||m.tags.mod==='1'||/(^|,)(broadcaster|moderator|lead_moderator)\//.test(m.tags.badges||''));
+      break;
+    case 'PRIVMSG':onPrivmsg(m,hist);break;
+    case 'USERNOTICE':onUserNotice(m,hist);break;
+    case 'CLEARMSG':markDeleted(m.tags['target-msg-id']);break;
+    case 'CLEARCHAT':onClearChat(m,hist);break;
+    case 'NOTICE':onNotice(m,hist);break;
+  }
+}
+function onNotice(m,hist){
+  const t=m.trailing||'';
+  if(/authentication failed|improperly formatted auth/i.test(t)){authFailed=true;setDot('err');sys('A chat bejelentkezés sikertelen – jelentkezz be újra a ⚙ menüben.');return}
+  if(!hist)sys(t);
+}
+function onClearChat(m,hist){
+  const uid=m.tags['target-user-id'];
+  if(!uid){if(!hist)sys('A chatet egy moderátor törölte.');return}
+  document.querySelectorAll(`[data-uid="${uid}"]`).forEach(markRemoved);
+  const d=m.tags['ban-duration'];
+  sys(`${m.trailing} ${d?fmtDur(d)+' timeoutot kapott':'ki lett tiltva (perma ban)'}.`,hist);
+}
+function markRemoved(e){if(cfg.showDeleted)e.classList.add('deleted');else e.remove()}
+function markDeleted(id){const e=msgEls.get(id);if(e)markRemoved(e)}
+
+/* ---------- megjelenítés ---------- */
+function sys(text,hist){push(el('div','sys'+(hist?' hist':''),text))}
+function onPrivmsg(m,hist){
+  const t=m.tags;let text=m.trailing||'',action=false;
+  if(text.startsWith('\u0001ACTION ')&&text.endsWith('\u0001')){action=true;text=text.slice(8,-1)}
+  const login=nick(m);
+  addMsg({id:t.id,uid:t['user-id'],login,name:t['display-name']||login,color:t.color,badges:t.badges,emotes:t.emotes,text,action,bits:t.bits,
+    first:t['first-msg']==='1',reply:t['reply-parent-display-name']?{name:t['reply-parent-display-name'],body:t['reply-parent-msg-body']}:null,
+    ts:+t['tmi-sent-ts']||+t['rm-received-ts']||Date.now(),hist});
+}
+function colorRow(row,o){
+  rowN++;
+  switch(cfg.palette){
+    case 'zebra':row.classList.add(rowN%2?'zebra-a':'zebra-b');return;
+    case 'cycle':row.style.setProperty('--h',CYCLE[rowN%CYCLE.length]);return;
+    case 'user':row.style.setProperty('--h',hashStr(o.login||'')%360);return;
+    default:row.style.setProperty('--h',Math.round(rowN*137.508)%360); // aranyszög: a szomszédos sorok mindig jól elütnek
+  }
+}
+function nameColor(hex,login){
+  if(!hex||hex.length<7)hex=DEFAULT_NAME_COLORS[hashStr(login||'')%DEFAULT_NAME_COLORS.length];
+  const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0;const l=(mx+mn)/2;
+  if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;h*=60}
+  return `hsl(${Math.round(h)},${Math.round(s*100)}%,${Math.round(Math.max(l,.64)*100)}%)`;
+}
+function isMention(text){
+  const low=text.toLowerCase();
+  if(me&&low.includes('@'+me.login))return true;
+  return (cfg.highlight||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean).some(w=>low.includes(w));
+}
+function renderText(box,text,emoteTag){
+  const chars=Array.from(text),ranges=[];
+  if(emoteTag)emoteTag.split('/').forEach(part=>{const [id,pos]=part.split(':');if(!pos)return;pos.split(',').forEach(p=>{const [a,b]=p.split('-').map(Number);ranges.push({a,b,id})})});
+  ranges.sort((x,y)=>x.a-y.a);
+  const ctx={box,last:null};let i=0;
+  for(const r of ranges){
+    if(r.a<i)continue;
+    if(r.a>i)words(ctx,chars.slice(i,r.a).join(''));
+    const base=`https://static-cdn.jtvnw.net/emoticons/v2/${r.id}/default/dark/`;
+    addEmote(ctx,{u1:base+'1.0',u2:base+'2.0',p:'Twitch'},chars.slice(r.a,r.b+1).join(''));
+    i=r.b+1;
+  }
+  if(i<chars.length)words(ctx,chars.slice(i).join(''));
+}
+function words(ctx,str){
+  for(const tok of str.split(/(\s+)/)){
+    if(!tok)continue;
+    if(/^\s+$/.test(tok)){ctx.box.append(tok);continue}
+    const em=emotes3p.get(tok);
+    if(em){addEmote(ctx,em,tok);continue}
+    ctx.last=null;
+    if(tok[0]==='@'&&tok.length>1)ctx.box.append(el('span','mention-tok',tok));
+    else ctx.box.append(tok);
+  }
+}
+function addEmote(ctx,em,name){
+  const img=new Image();img.className='emote';img.src=em.u1;if(em.u2)img.srcset=`${em.u1} 1x, ${em.u2} 2x`;img.alt=name;img.title=`${name} (${em.p})`;
+  if(em.zw&&ctx.last){ctx.last.append(img);return} // zero-width emote az előzőre rétegezve
+  const w=el('span','emote-wrap');w.append(img);ctx.box.append(w);ctx.last=w;
+}
+function badgeInfo(b){
+  const set=b.split('/')[0];
+  // pontos verzió, különben a set legalacsonyabb verziója (pl. sub jelvény, ha a csatornán nincs egyedi)
+  return badgeUrls.get(b)||badgeUrls.get(set+'/1')||badgeUrls.get(set+'/0')||[...badgeUrls].find(([k])=>k.startsWith(set+'/'))?.[1];
+}
+function badgeSpan(badges,cls){
+  const bs=el('span','badges');
+  (badges||'').split(',').filter(Boolean).forEach(b=>{const u=badgeInfo(b);if(!u)return;const i=new Image();i.className=cls;i.onerror=()=>i.remove();i.src=u.u1;if(u.u2)i.srcset=`${u.u1} 1x, ${u.u2} 2x`;i.alt=i.title=u.t;bs.append(i)});
+  return bs;
+}
+function addMsg(o){
+  const row=el('div','msg'+(o.action?' action':'')+(o.hist?' hist':''));
+  colorRow(row,o);
+  if(o.id){row.dataset.id=o.id;msgEls.set(o.id,row)}
+  if(o.uid)row.dataset.uid=o.uid;
+  if(o.reply)row.append(el('div','reply',`↪ válasz @${o.reply.name}: ${o.reply.body||''}`));
+  if(cfg.timestamps)row.append(el('span','time',hhmm(o.ts)));
+  if(o.first)row.append(el('span','tag first','ELSŐ ÜZENET'));
+  if(o.bits)row.append(el('span','tag bits','💎 '+o.bits));
+  if(o.badges)row.append(badgeSpan(o.badges,'badge'));
+  const nm=el('span','name',o.name);nm.style.color=nameColor(o.color,o.login);nm.onclick=ev=>openCard(o,ev);
+  row.append(nm,document.createTextNode(o.action?' ':': '));
+  const tx=el('span','text');renderText(tx,o.text,o.emotes);if(o.action){tx.style.color=nm.style.color;tx.style.fontStyle='italic'}
+  row.append(tx);
+  if(o.first)row.classList.add('first');
+  if(me&&o.login!==me.login&&isMention(o.text))row.classList.add('mention');
+  if(o.id&&o.uid&&o.uid!==room.id&&o.uid!==me.id)row.append(actionsFor(o));
+  if(o.uid){let h=userHist.get(o.uid);if(!h)userHist.set(o.uid,h=[]);h.push({ts:o.ts,text:o.text});if(h.length>50)h.shift()}
+  push(row);
+}
+function onUserNotice(m,hist){
+  const t=m.tags,id=t['msg-id']||'';
+  const kind=id==='raid'?'raid':id.startsWith('announcement')?'announce':'';
+  const e=el('div','event '+kind+(hist?' hist':''));
+  let sysText=t['system-msg']||'';
+  if(id==='announcement')sysText='📢 Bejelentés – '+(t['display-name']||nick(m));
+  else if(id==='raid')sysText='🚀 '+sysText;
+  else if(/sub|gift/.test(id))sysText='⭐ '+sysText;
+  if(sysText)e.append(el('div','sysmsg',sysText));
+  if(m.trailing){const tx=el('div','text');renderText(tx,m.trailing,t.emotes);e.append(tx)}
+  if(t.id){e.dataset.id=t.id;msgEls.set(t.id,e)}
+  if(t['user-id'])e.dataset.uid=t['user-id'];
+  push(e);
+}
+function paused(){return !stick||(cfg.pauseHover&&hovering)}
+function push(node){
+  chat.append(node);
+  const max=cfg.maxMessages*(paused()?2:1);
+  while(chat.childElementCount>max){const f=chat.firstElementChild;if(f.dataset.id)msgEls.delete(f.dataset.id);f.remove()}
+  if(!paused())chat.scrollTop=chat.scrollHeight;
+  else if(!node.classList.contains('sys')){pending++;const b=$('#newBtn');b.textContent=`↓ ${pending} új üzenet`;b.style.display='block'}
+}
+function toBottom(){chat.scrollTop=chat.scrollHeight;stick=true;clearPending()}
+function clearPending(){pending=0;$('#newBtn').style.display='none'}
+function renderModes(){
+  const box=$('#modes');box.replaceChildren();
+  const add=t=>box.append(el('span','chip',t));
+  if(roomModes['emote-only']==='1')add('Emote-only');
+  if(roomModes['subs-only']==='1')add('Sub-only');
+  const f=roomModes['followers-only'];if(f!=null&&f!==''&&f!=='-1')add('Follower'+(f!=='0'?' '+f+'p':''));
+  if(+roomModes.slow>0)add('Slow '+roomModes.slow+'s');
+  if(roomModes.r9k==='1')add('Unique');
+}
+
+/* ---------- moderálás UI ---------- */
+function actBtn(label,title,fn,confirm){
+  const b=el('button','act'+(confirm?' ban':''),label);b.title=title;
+  b.onclick=e=>{e.stopPropagation();
+    if(confirm&&!b.classList.contains('armed')){b.classList.add('armed');b.textContent='Biztos?';setTimeout(()=>{b.classList.remove('armed');b.textContent=label},3000);return}
+    b.classList.remove('armed');b.textContent=label;fn()};
+  return b;
+}
+function actionsFor(o){
+  const box=el('div','actions');
+  box.append(
+    actBtn('🗑','Üzenet törlése',async()=>{if(await run(()=>modApi.del(o.id),'Üzenet törölve'))markDeleted(o.id)}),
+    actBtn('10p','Timeout 10 perc',()=>run(()=>modApi.timeout(o.uid,600),`${o.name}: 10 perc timeout`)),
+    actBtn('24ó','Timeout 24 óra',()=>run(()=>modApi.timeout(o.uid,86400),`${o.name}: 24 óra timeout`)),
+    actBtn('BAN','Végleges kitiltás (kattints kétszer)',()=>run(()=>modApi.ban(o.uid),`${o.name} kitiltva`),true));
+  return box;
+}
+function openCard(o,ev){
+  ev.stopPropagation();
+  const c=$('#card');c.replaceChildren();
+  const n=el('div','cname',o.name);n.style.color=nameColor(o.color,o.login);c.append(n);
+  if(o.badges){const bs=badgeSpan(o.badges,'');bs.className='cbadges';bs.querySelectorAll('img').forEach(i=>i.after(document.createTextNode(i.title+'  ')));if(bs.childElementCount)c.append(bs)}
+  if(canMod&&o.uid&&o.uid!==room.id&&o.uid!==me.id){
+    const bb=el('div','cbtns');
+    [['1p',60],['10p',600],['1ó',3600],['24ó',86400],['7nap',604800]].forEach(([l,s])=>bb.append(actBtn(l,'Timeout '+fmtDur(s),()=>run(()=>modApi.timeout(o.uid,s),`${o.name}: ${fmtDur(s)} timeout`))));
+    bb.append(actBtn('BAN','Perma ban (kattints kétszer)',()=>run(()=>modApi.ban(o.uid),`${o.name} kitiltva`),true));
+    bb.append(actBtn('Unban','Tiltás / timeout feloldása',()=>run(()=>modApi.unban(o.uid),`${o.name} feloldva`)));
+    bb.append(actBtn('📣 SO','Shoutout',()=>run(()=>modApi.shoutout(o.uid),`Shoutout: ${o.name}`)));
+    c.append(bb);
+  }
+  const h=userHist.get(o.uid)||[];
+  const hl=el('div','uhist');hl.append(el('div',null,`Üzenetei ebben a munkamenetben (${h.length}):`));
+  h.slice(-15).reverse().forEach(x=>hl.append(el('div',null,`${hhmm(x.ts)}  ${x.text}`)));
+  c.append(hl);
+  c.style.display='block';
+  const w=c.offsetWidth,hg=c.offsetHeight;
+  c.style.left=Math.max(4,Math.min(ev.clientX,innerWidth-w-4))+'px';
+  c.style.top=Math.max(4,Math.min(ev.clientY+10,innerHeight-hg-4))+'px';
+}
+
+/* ---------- raid ---------- */
+const RAID_SECS=90;
+const fmtNum=n=>Number(n).toLocaleString('hu-HU');
+async function addAvatars(list){
+  if(demo||!list.length)return;
+  const j=await helix('GET','users',{id:list.slice(0,100).map(c=>c.id)});
+  const m=new Map(j.data.map(u=>[u.id,u.profile_image_url]));list.forEach(c=>{c.img=c.img||m.get(c.id)});
+}
+async function followedLive(){
+  if(demo)return DEMO_RAID;
+  const j=await helix('GET','streams/followed',{user_id:me.id,first:'50'});
+  const list=j.data.map(s=>({id:s.user_id,login:s.user_login,name:s.user_name,game:s.game_name,viewers:s.viewer_count,live:true}));
+  await addAvatars(list);return list;
+}
+async function searchChannels(q){
+  if(demo)return DEMO_RAID.filter(c=>c.name.toLowerCase().includes(q.toLowerCase()));
+  const j=await helix('GET','search/channels',{query:q,first:'12'});
+  const list=j.data.map(c=>({id:c.id,login:c.broadcaster_login,name:c.display_name,game:c.game_name,live:c.is_live,img:c.thumbnail_url}));
+  const live=list.filter(c=>c.live).map(c=>c.id);
+  if(live.length){const s=await helix('GET','streams',{user_id:live});const m=new Map(s.data.map(x=>[x.user_id,x.viewer_count]));list.forEach(c=>{if(m.has(c.id))c.viewers=m.get(c.id)})}
+  return list.sort((a,b)=>(b.live-a.live)||((b.viewers||0)-(a.viewers||0)));
+}
+function rItem(c){
+  const it=el('div','ritem');const img=new Image();img.alt='';img.onerror=()=>{img.removeAttribute('src')};if(c.img)img.src=c.img;
+  const t=el('div');t.style.minWidth='0';t.append(el('div','rn',c.name),el('div','rg',c.game||(c.live?'Élő':'Offline')));
+  it.append(img,t);
+  if(c.live)it.append(el('span','rv','🔴 '+(c.viewers!=null?fmtNum(c.viewers):'ÉLŐ')));
+  it.onclick=()=>showRaidConfirm(c);return it;
+}
+function fillList(box,list,empty){box.replaceChildren(...(list.length?list.map(rItem):[el('div','hint',empty)]))}
+function openRaid(){
+  $('#raidModal').classList.add('open');
+  if(raidState&&raidState.running)showCountdown();else showRaidSearch();
+}
+function showRaidSearch(){
+  const body=$('#raidBody');body.replaceChildren();const pad=el('div','rpad');body.append(pad);
+  if(!room){pad.append(el('div','hint','Előbb jelentkezz be a ⚙ menüben.'));return}
+  if(room.id!==me.id)pad.append(el('div','hint','⚠ Raidelni csak a saját csatornádról lehet – most '+room.name+' chatjét nézed.'));
+  const inp=el('input');inp.placeholder='🔍 Keress csatornát…';pad.append(inp);
+  const sec=el('div','rsec'),box=el('div');pad.append(sec,box);
+  const followed=async()=>{sec.textContent='Élő követett csatornák';box.replaceChildren(el('div','hint','Betöltés…'));
+    try{const l=await followedLive();if(!inp.value.trim())fillList(box,l,'Most egyik követett csatornád sem élő – keress fent.')}
+    catch(e){box.replaceChildren(el('div','hint','Nem sikerült betölteni ('+e.message+'). Lehet, hogy újra be kell jelentkezned.'))}};
+  let deb;
+  inp.addEventListener('input',()=>{clearTimeout(deb);const q=inp.value.trim();if(!q){followed();return}
+    deb=setTimeout(async()=>{sec.textContent='Találatok';box.replaceChildren(el('div','hint','Keresés…'));
+      try{const l=await searchChannels(q);if(inp.value.trim()===q)fillList(box,l,'Nincs találat.')}catch(e){box.replaceChildren(el('div','hint','Hiba: '+e.message))}},300)});
+  followed();setTimeout(()=>inp.focus(),50);
+}
+function showRaidConfirm(c){
+  const body=$('#raidBody');body.replaceChildren();const w=el('div','rconfirm');
+  const img=new Image();img.alt='';img.onerror=()=>{img.removeAttribute('src')};if(c.img)img.src=c.img;
+  w.append(img,el('div','rbig',c.name),el('div','hint',[c.live?'🔴 Élő':'⚫ Offline',c.game,c.viewers!=null?fmtNum(c.viewers)+' néző':null].filter(Boolean).join(' · ')));
+  const go=el('button','btn primary rbtn','🚀 Raid'),back=el('button','btn rbtn','Vissza');
+  go.onclick=async()=>{
+    if(room.id!==me.id){toast('Raidelni csak a saját csatornádról lehet','err');return}
+    go.disabled=true;go.textContent='Indítás…';
+    if(await run(()=>modApi.raid(c.id))){raidState={target:c,start:Date.now(),running:true};showCountdown()}
+    else{go.disabled=false;go.textContent='🚀 Raid'}};
+  back.onclick=showRaidSearch;w.append(go,back);body.append(w);
+}
+function raidBtnText(t){$('#raidBtn').textContent=t||'🚀 Raid'}
+function showCountdown(){
+  const body=$('#raidBody');body.replaceChildren();const c=raidState.target;const w=el('div','rconfirm');
+  const img=new Image();img.alt='';img.onerror=()=>{img.removeAttribute('src')};if(c.img)img.src=c.img;
+  const bar=el('div','rbar'),fill=el('div');bar.append(fill);
+  const lbl=el('div','hint'),cancel=el('button','btn rbtn','Raid visszavonása'),close=el('button','btn rbtn','Bezár (a raid fut tovább)');
+  w.append(img,el('div','rbig','Raid: '+c.name),bar,lbl,cancel,close);body.append(w);
+  cancel.onclick=async()=>{if(await run(()=>modApi.unraid(),'Raid visszavonva')){raidState=null;clearInterval(raidTimer);raidBtnText();showRaidSearch()}};
+  close.onclick=()=>$('#raidModal').classList.remove('open');
+  clearInterval(raidTimer);
+  const tick=()=>{
+    if(!raidState){clearInterval(raidTimer);return}
+    const left=Math.max(0,RAID_SECS-Math.floor((Date.now()-raidState.start)/1000));
+    fill.style.width=(100*(RAID_SECS-left)/RAID_SECS)+'%';
+    if(left>0){lbl.textContent=`Kb. ${left} mp múlva indul. Azonnal a Twitchen a „Raid most” gombbal indíthatod.`;raidBtnText('🚀 '+left+'s')}
+    else{lbl.textContent='A raid elindult! 🎉';cancel.remove();raidState.running=false;clearInterval(raidTimer);raidBtnText()}
+  };
+  tick();raidTimer=setInterval(tick,1000);
+}
+
+/* ---------- üzenetküldés, parancsok ---------- */
+function parseDur(s){const m=/^(\d+)([smhd]?)$/i.exec(s||'');if(!m)return 600;return +m[1]*({'':1,s:1,m:60,h:3600,d:86400})[m[2].toLowerCase()]}
+async function send(){
+  const inp=$('#input');const v=inp.value.trim();if(!v||!room)return;
+  inp.value='';
+  if(v[0]==='/'){const [cmd,...a]=v.slice(1).split(/\s+/);await command(cmd.toLowerCase(),a);return}
+  if(!demo){if(!ws||ws.readyState!==1){toast('Nincs kapcsolat a chattel','err');return}ws.send(`PRIVMSG #${room.login} :${v}`)}
+  addMsg({uid:me.id,login:me.login,name:me.display,color:myColor,badges:myBadges,text:v,ts:Date.now()});
+}
+async function command(cmd,a){
+  const user=async()=>{if(!a[0])throw new Error('Adj meg egy felhasználónevet');return getUser(a[0])};
+  try{
+    switch(cmd){
+      case 'ban':{const u=await user();await modApi.ban(u.id,a.slice(1).join(' '));toast(u.display_name+' kitiltva');break}
+      case 'unban':case 'untimeout':{const u=await user();await modApi.unban(u.id);toast(u.display_name+' feloldva');break}
+      case 'timeout':case 'to':{const u=await user();const s=parseDur(a[1]);await modApi.timeout(u.id,s,a.slice(2).join(' '));toast(`${u.display_name}: ${fmtDur(s)} timeout`);break}
+      case 'raid':{const u=await user();if(room.id!==me.id)throw new Error('Raid csak a saját csatornádról');await modApi.raid(u.id);toast('Raid elindítva → '+u.display_name);break}
+      case 'unraid':await modApi.unraid();toast('Raid visszavonva');break;
+      case 'so':case 'shoutout':{const u=await user();await modApi.shoutout(u.id);toast('Shoutout: '+u.display_name);break}
+      case 'clear':await modApi.clear();toast('Chat törölve');break;
+      case 'me':{const t=a.join(' ');if(!t)break;if(!demo&&ws&&ws.readyState===1)ws.send(`PRIVMSG #${room.login} :\u0001ACTION ${t}\u0001`);addMsg({uid:me.id,login:me.login,name:me.display,color:myColor,badges:myBadges,text:t,action:true,ts:Date.now()});break}
+      default:toast('Ismeretlen parancs: /'+cmd,'err');
+    }
+  }catch(e){toast('Hiba: '+e.message,'err')}
+}
+
+/* ---------- beállítások ---------- */
+function openSettings(){
+  $('#sClientId').value=cfg.clientId;$('#sToken').value='';$('#sChannel').value=cfg.channel;$('#sPalette').value=cfg.palette;
+  $('#sTint').value=cfg.tint;$('#sFont').value=cfg.fontSize;$('#sHighlight').value=cfg.highlight;
+  BOOL_KEYS.forEach(k=>$('#s_'+k).checked=!!cfg[k]);
+  $('#redirHint').textContent=location.protocol==='file:'?'(file:// címről nem megy – lásd a leírást)':redirectUri();
+  $('#whoami').textContent=me&&!demo?('Bejelentkezve: '+me.login):(cfg.token?'Token elmentve':'Nincs bejelentkezve');
+  $('#settingsModal').classList.add('open');
+}
+function saveSettings(){
+  cfg.clientId=$('#sClientId').value.trim();
+  const tok=$('#sToken').value.trim().replace(/^oauth:/i,'');if(tok)cfg.token=tok;
+  cfg.channel=$('#sChannel').value.trim().replace(/^#/,'').toLowerCase();
+  cfg.palette=$('#sPalette').value;cfg.tint=+$('#sTint').value;cfg.fontSize=+$('#sFont').value;cfg.highlight=$('#sHighlight').value;
+  BOOL_KEYS.forEach(k=>cfg[k]=$('#s_'+k).checked);
+  saveCfg();applyLook();$('#settingsModal').classList.remove('open');start();
+}
+
+/* ---------- indítás ---------- */
+function reset(){
+  gen++;authFailed=false;reconnectDelay=1000;demo=false;
+  if(ws){try{ws.close()}catch(e){}ws=null}
+  chat.replaceChildren();msgEls.clear();userHist.clear();rowN=0;stick=true;clearPending();setCanMod(false);setDot('');
+  for(const k in roomModes)delete roomModes[k];renderModes();
+}
+function welcome(){
+  const w=el('div','welcome');w.append(el('div',null,'Nincs bejelentkezve.'));
+  const b=el('button','btn primary','⚙ Beállítások');b.onclick=openSettings;
+  const d=el('button','btn','👀 Demó');d.onclick=startDemo;
+  w.append(b,d);return w;
+}
+async function start(){
+  reset();
+  if(!cfg.token){chat.append(welcome());$('#chanName').textContent='—';return}
+  const myGen=gen;
+  try{
+    const v=await validate();
+    me={id:v.user_id,login:v.login,clientId:v.client_id,scopes:v.scopes||[],display:v.login};
+    const missing=SCOPES.filter(s=>!me.scopes.includes(s));
+    if(missing.length)sys('Hiányzó jogosultságok: '+missing.join(', ')+' – jelentkezz be újra a ⚙ menüben.');
+    const meU=await getUser(me.login);me.display=meU.display_name;
+    const u=cfg.channel&&cfg.channel!==me.login?await getUser(cfg.channel):meU;
+    if(myGen!==gen)return;
+    room={id:u.id,login:u.login,name:u.display_name};
+    $('#chanName').textContent=room.name;
+    setCanMod(room.id===me.id);
+    const [er]=await Promise.all([loadEmotes(),loadBadges()]);
+    if(myGen!==gen)return;
+    sys(`${er.n} harmadik féltől származó emote betöltve (7TV${cfg.bttv?', BTTV':''}${cfg.ffz?', FFZ':''})${er.ok7?'':' – a 7TV API most nem válaszolt'}${er.has7?'':' – ennek a csatornának nincs 7TV szettje'}.`);
+    if(cfg.history)await loadHistory();
+    if(myGen!==gen)return;
+    connectIrc();
+  }catch(e){sys('Hiba: '+e.message);setDot('err');if(/token/i.test(e.message))openSettings()}
+}
+function startDemo(){
+  reset();demo=true;
+  me={id:'1',login:'te',clientId:'',scopes:SCOPES,display:'Te'};room={id:'1',login:'te',name:'Demó csatorna'};
+  $('#chanName').textContent=room.name;setCanMod(true);setDot('on');myColor='#a970ff';myBadges='broadcaster/1';
+  badgeUrls.clear();for(const[k,id]of Object.entries(DEMO_BADGES))badgeUrls.set(k,{u1:BADGE_CDN+id+'/1',u2:BADGE_CDN+id+'/2',t:k.split('/')[0]});
+  Object.assign(roomModes,{'followers-only':'10',slow:'3'});renderModes();
+  const ts=Date.now();
+  const BADGES={101:'moderator/1,subscriber/12',102:'vip/1,subscriber/6',105:'subscriber/3,premium/1',107:'premium/1',110:'subscriber/0'};
+  const pm=(i,uid,login,name,color,text)=>`@badges=${BADGES[uid]||''};color=${color};display-name=${name};emotes=;id=d${i};tmi-sent-ts=${ts};user-id=${uid} :${login}!${login}@${login}.tmi.twitch.tv PRIVMSG #te :${text}`;
+  const lines=[
+    pm(1,101,'modpisti','ModPisti','#1E90FF','Sziasztok, mindjárt kezdünk!'),
+    pm(2,102,'kata_gamer','Kata_Gamer','#FF69B4','Hali Kappa').replace('emotes=;','emotes=25:5-9;'),
+    pm(3,103,'zoli99','Zoli99','','első vagyok?? @te mi lesz ma?','').replace('emotes=;','emotes=;first-msg=1;'),
+    pm(4,104,'spammer123','spammer123','#00FF7F','KÖVESS BE INGYEN FOLLOWERT KAPSZ!!!'),
+    pm(5,105,'dani','Dani','#DAA520','tegnapi stream nagyon jó volt').replace('emotes=;','emotes=;bits=100;'),
+    `@display-name=Bence;emotes=25:9-13;id=d6;msg-id=resub;system-msg=Bence\\selőfizetett\\sTier\\s1-gyel.\\s12\\shónapja\\ssub!;tmi-sent-ts=${ts};user-id=106 :tmi.twitch.tv USERNOTICE #te :12 hónap Kappa`,
+    pm(7,107,'reka','Réka','#8A2BE2','ma mit játszunk? 😄'),
+    pm(8,102,'kata_gamer','Kata_Gamer','#FF69B4','\u0001ACTION integet mindenkinek\u0001'),
+    `@display-name=ForrásStreamer;id=d9;msg-id=raid;msg-param-viewerCount=42;system-msg=42\\snéző\\sraidel\\sForrásStreamer\\scsatornájáról!;tmi-sent-ts=${ts};user-id=109 :tmi.twitch.tv USERNOTICE #te`,
+    pm(10,110,'gabor','Gábor','#FF4500','hello raiderek!'),
+  ];
+  lines.forEach((l,i)=>setTimeout(()=>{if(demo)handleLine(l,false)},i*250));
+  setTimeout(()=>{if(demo)sys('Demó mód: a gombok működnek, de nem hívják a Twitch API-t. Valódi használathoz ⚙ → bejelentkezés.')},lines.length*250);
+}
+
+/* ---------- eseménykezelők ---------- */
+chat.addEventListener('scroll',()=>{stick=chat.scrollHeight-chat.scrollTop-chat.clientHeight<40;if(!paused())clearPending()});
+chat.addEventListener('mouseenter',()=>{hovering=true});
+chat.addEventListener('mouseleave',()=>{hovering=false;if(stick)toBottom()});
+$('#newBtn').onclick=toBottom;
+$('#sendBtn').onclick=send;
+$('#input').addEventListener('keydown',e=>{if(e.key==='Enter')send()});
+$('#settingsBtn').onclick=openSettings;
+$('#settingsSave').onclick=saveSettings;
+$('#settingsCancel').onclick=()=>$('#settingsModal').classList.remove('open');
+$('#loginBtn').onclick=login;
+$('#logoutBtn').onclick=()=>{cfg.token='';saveCfg();me=null;$('#settingsModal').classList.remove('open');start()};
+$('#raidBtn').onclick=openRaid;
+$('#raidClose').onclick=()=>$('#raidModal').classList.remove('open');
+$('#reloadBtn').onclick=async()=>{if(!room||demo)return;const r=await loadEmotes();await loadBadges();toast(r.n+' emote újratöltve')};
+document.addEventListener('click',e=>{if(!$('#card').contains(e.target))$('#card').style.display='none'});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#card').style.display='none';document.querySelectorAll('.backdrop.open').forEach(b=>b.classList.remove('open'))}});
+
+handleOAuthReturn();applyLook();
+if(/[?&]demo\b/.test(location.search))startDemo();else start();
+</script>
+</body>
+</html>
