@@ -47,6 +47,8 @@ header{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--
 .tag.first{background:var(--ok);color:#000}
 .tag.bits{background:#9147ff;color:#fff}
 .reply{font-size:.8em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.link{color:#bf94ff;text-decoration:underline;cursor:pointer;word-break:break-all}
+.link:hover{color:#d9bfff}
 .mention-tok{font-weight:700;background:rgba(255,255,255,.1);border-radius:3px;padding:0 2px}
 .emote-wrap{display:inline-grid;vertical-align:middle;margin:-5px 1px}
 .emote-wrap>img{grid-area:1/1;justify-self:center;align-self:center}
@@ -399,9 +401,33 @@ function words(ctx,str){
     const em=emotes3p.get(tok);
     if(em){addEmote(ctx,em,tok);continue}
     ctx.last=null;
+    const lk=linkify(tok);
+    if(lk){ctx.box.append(lk.a);if(lk.rest)ctx.box.append(lk.rest);continue}
     if(tok[0]==='@'&&tok.length>1)ctx.box.append(el('span','mention-tok',tok));
     else ctx.box.append(tok);
   }
+}
+const URL_RE=/^(?:(?:https?:\/\/|www\.)[^\s]+|[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|hu|tv|gg|net|org|io|be|ly|me|co|app|dev|eu|de|uk|link|xyz|info)(?:[\/?#][^\s]*)?)$/i;
+function linkify(tok){
+  const m=/^(.*?)([.,!?:;)\]]*)$/.exec(tok);const core=m[1],rest=m[2];
+  if(!core||!URL_RE.test(core))return null;
+  const href=/^https?:\/\//i.test(core)?core:'https://'+core;
+  let u;try{u=new URL(href)}catch(e){return null}
+  if(!/^https?:$/.test(u.protocol))return null;
+  const a=el('a','link',core);a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.title=u.href+'\n(jobb klikk: link másolása)';
+  a.onclick=e=>{e.preventDefault();openLink(u.href)};
+  a.oncontextmenu=e=>{e.preventDefault();copyText(u.href,'Link másolva')};
+  return {a,rest};
+}
+function copyText(t,msg){
+  const done=()=>toast(msg);
+  try{navigator.clipboard.writeText(t).then(done,()=>fallbackCopy(t)&&done())}catch(e){if(fallbackCopy(t))done()}
+}
+function fallbackCopy(t){const ta=el('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.append(ta);ta.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();if(!ok)toast('Nem sikerült másolni: '+t,'err');return ok}
+function openLink(url){
+  let w=null;try{w=window.open(url,'_blank')}catch(e){}
+  if(w){try{w.opener=null}catch(e){}}
+  else copyText(url,'Nem nyílt meg – link a vágólapra másolva, illeszd be a böngésződbe');
 }
 function addEmote(ctx,em,name){
   const img=new Image();img.className='emote';img.src=em.u1;if(em.u2)img.srcset=`${em.u1} 1x, ${em.u2} 2x`;img.alt=name;img.title=`${name} (${em.p})`;
@@ -579,7 +605,14 @@ function showCountdown(){
   const img=new Image();img.alt='';img.onerror=()=>{img.removeAttribute('src')};if(c.img)img.src=c.img;
   const bar=el('div','rbar'),fill=el('div');bar.append(fill);
   const lbl=el('div','hint'),cancel=el('button','btn rbtn','Raid visszavonása'),close=el('button','btn rbtn','Bezár (a raid fut tovább)');
-  w.append(img,el('div','rbig','Raid: '+c.name),bar,lbl,cancel,close);body.append(w);
+  const now=el('button','btn primary rbtn','⚡ Raid most (Twitch-en)');
+  now.title='Megnyitja a Twitch felugró chatet, ahol a lila raid sávban ott a „Raid most” gomb';
+  now.onclick=()=>{
+    const url=`https://www.twitch.tv/popout/${room.login}/chat?popout=`;
+    const win=window.open(url,'twitchRaidNow','width=420,height=700');
+    if(!win)copyText(url,'Nem nyílt meg az ablak – a link a vágólapra került, nyisd meg böngészőben');
+  };
+  w.append(img,el('div','rbig','Raid: '+c.name),bar,lbl,now,cancel,close);body.append(w);
   cancel.onclick=async()=>{if(await run(()=>modApi.unraid(),'Raid visszavonva')){raidState=null;clearInterval(raidTimer);raidBtnText();showRaidSearch()}};
   close.onclick=()=>$('#raidModal').classList.remove('open');
   clearInterval(raidTimer);
@@ -587,8 +620,8 @@ function showCountdown(){
     if(!raidState){clearInterval(raidTimer);return}
     const left=Math.max(0,RAID_SECS-Math.floor((Date.now()-raidState.start)/1000));
     fill.style.width=(100*(RAID_SECS-left)/RAID_SECS)+'%';
-    if(left>0){lbl.textContent=`Kb. ${left} mp múlva indul. Azonnal a Twitchen a „Raid most” gombbal indíthatod.`;raidBtnText('🚀 '+left+'s')}
-    else{lbl.textContent='A raid elindult! 🎉';cancel.remove();raidState.running=false;clearInterval(raidTimer);raidBtnText()}
+    if(left>0){lbl.textContent=`Kb. ${left} mp múlva magától indul.`;raidBtnText('🚀 '+left+'s')}
+    else{lbl.textContent='A raid elindult! 🎉';cancel.remove();now.remove();raidState.running=false;clearInterval(raidTimer);raidBtnText()}
   };
   tick();raidTimer=setInterval(tick,1000);
 }
@@ -689,7 +722,7 @@ function startDemo(){
     pm(4,104,'spammer123','spammer123','#00FF7F','KÖVESS BE INGYEN FOLLOWERT KAPSZ!!!'),
     pm(5,105,'dani','Dani','#DAA520','tegnapi stream nagyon jó volt').replace('emotes=;','emotes=;bits=100;'),
     `@display-name=Bence;emotes=25:9-13;id=d6;msg-id=resub;system-msg=Bence\\selőfizetett\\sTier\\s1-gyel.\\s12\\shónapja\\ssub!;tmi-sent-ts=${ts};user-id=106 :tmi.twitch.tv USERNOTICE #te :12 hónap Kappa`,
-    pm(7,107,'reka','Réka','#8A2BE2','ma mit játszunk? 😄'),
+    pm(7,107,'reka','Réka','#8A2BE2','ma mit játszunk? 😄 nézd: https://www.youtube.com/watch?v=dQw4w9WgXcQ, meg twitch.tv/gamergabi'),
     pm(8,102,'kata_gamer','Kata_Gamer','#FF69B4','\u0001ACTION integet mindenkinek\u0001'),
     `@display-name=ForrásStreamer;id=d9;msg-id=raid;msg-param-viewerCount=42;system-msg=42\\snéző\\sraidel\\sForrásStreamer\\scsatornájáról!;tmi-sent-ts=${ts};user-id=109 :tmi.twitch.tv USERNOTICE #te`,
     pm(10,110,'gabor','Gábor','#FF4500','hello raiderek!'),
